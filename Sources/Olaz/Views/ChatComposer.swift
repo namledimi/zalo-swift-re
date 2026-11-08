@@ -31,6 +31,12 @@ struct ChatComposer: View {
     @State private var importKind = AttachmentKind.files
     @State private var showMyCard = false
     @State private var reminderInfo: ReminderComposeInfo?
+    @State private var savedQuery: SavedReplyQuery?
+    @State private var dismissedSavedQuery: SavedReplyQuery?
+    @State private var savedSelection = 0
+    @State private var savedReplyPicker: SavedReplyPickerRequest?
+    @State private var replyToSave: SavedReply?
+    @State private var notebookContext: ConversationNotebookContext?
 
     private enum AttachmentKind { case media, files }
     /// Stickers suggested for the draft (official suggestion logic); they show only while the draft still is the text they were found for.
@@ -38,8 +44,13 @@ struct ChatComposer: View {
     @State private var sendingSuggestion: String?
 
     private var suggestionsOpen: Bool { isGroup && query != nil && !candidates.isEmpty }
+    private var savedMatches: [SavedReply] {
+        guard let account = engine.profile?.userId, let savedQuery else { return [] }
+        return Array(engine.savedReplies.matches(account: account, query: savedQuery.text, slash: true).prefix(8))
+    }
+    private var savedSuggestionsOpen: Bool { !suggestionsOpen && savedQuery != nil && savedQuery != dismissedSavedQuery && !savedMatches.isEmpty }
     private var stickerStripOpen: Bool {
-        typingStickers.isVisible(draft: draft, mentionListOpen: suggestionsOpen, settingEnabled: StickerSuggestState.shared.setting?.enabled)
+        typingStickers.isVisible(draft: draft, mentionListOpen: suggestionsOpen || savedSuggestionsOpen, settingEnabled: StickerSuggestState.shared.setting?.enabled)
     }
 
     private var isEmpty: Bool { draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -80,6 +91,10 @@ struct ChatComposer: View {
                 MentionSuggestions(candidates: candidates, selected: $selected, pick: pick)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
+            if savedSuggestionsOpen {
+                SavedReplySuggestions(replies: savedMatches, selected: $savedSelection, pick: { _ = insertSavedReply($0) }, manage: openSavedReplies)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
             if stickerStripOpen {
                 TypingStickerStrip(stickers: typingStickers.stickers, sending: sendingSuggestion, pick: sendSuggestion,
                                    dismiss: { typingStickers.dismissed = true })
@@ -101,6 +116,7 @@ struct ChatComposer: View {
         .padding(.top, 8)
         .padding(.bottom, 12)
         .animation(.snappy(duration: 0.18), value: suggestionsOpen)
+        .animation(.snappy(duration: 0.18), value: savedSuggestionsOpen)
         .animation(.snappy(duration: 0.18), value: stickerStripOpen)
         .animation(.snappy(duration: 0.18), value: replyTo?.id)
         .animation(.snappy(duration: 0.18), value: typingName)
@@ -109,6 +125,15 @@ struct ChatComposer: View {
         .task(id: query) { await loadCandidates() }
         .task(id: draft) { await loadStickerSuggestions() }
         .onChange(of: draft) { _, _ in typingStickers.dismissed = false }
+        .onChange(of: savedMatches.map(\.id)) { _, _ in savedSelection = 0 }
+        .sheet(item: $savedReplyPicker) { request in
+            SavedReplyPickerSheet(account: request.account) { reply in
+                guard engine.profile?.userId == request.account, engine.openConversationId == request.conversation else { return false }
+                return insertSavedReply(reply)
+            }
+        }
+        .sheet(item: $replyToSave) { SavedReplyEditor(reply: $0) }
+        .sheet(item: $notebookContext) { ConversationNotebookSheet(context: $0) }
         .sheet(isPresented: $showPollCreate) { PollCreateSheet(conversationId: conversationId) }
         .sheet(isPresented: $showMyCard) { MyCardSheet(conversationId: conversationId, conversationName: name) }
         .sheet(isPresented: Binding(get: { reminderInfo != nil }, set: { if !$0 { reminderInfo = nil } })) {
@@ -135,6 +160,29 @@ struct ChatComposer: View {
                     Button("Chụp không kèm cửa sổ \(AppBrand.name)") { engine.startScreenCapture(in: conversationId, withOlaz: false) }
                 }
                 Button("Danh thiếp của tôi", systemImage: "person.crop.rectangle") { showMyCard = true }
+                Divider()
+                Menu("Tin nhắn mẫu", systemImage: "text.badge.plus") {
+                    if let account = engine.profile?.userId {
+                        ForEach(engine.savedReplies.replies(account: account).prefix(8)) { reply in
+                            Button("/\(reply.shortcut) · \(reply.title)") { if !insertSavedReply(reply) { NSSound.beep() } }
+                        }
+                        Divider()
+                        Button("Xem và quản lý mẫu…") { openSavedReplies() }
+                        Button("Lưu nội dung đang soạn…") {
+                            replyToSave = SavedReply(account: account, shortcut: "", title: "", body: draft)
+                        }.disabled(isEmpty || engine.savedReplies.storageError != nil)
+                    }
+                }.disabled(engine.profile == nil)
+                Button("Ghi chú riêng…", systemImage: "note.text") {
+                    if let account = engine.profile?.userId {
+                        notebookContext = ConversationNotebookContext(account: account, conversationID: conversationId, name: name, section: .notes)
+                    }
+                }.disabled(engine.profile == nil)
+                Button("Việc cần làm…", systemImage: "checklist") {
+                    if let account = engine.profile?.userId {
+                        notebookContext = ConversationNotebookContext(account: account, conversationID: conversationId, name: name, section: .tasks)
+                    }
+                }.disabled(engine.profile == nil)
                 Divider()
                 Button("Nhắc hẹn", systemImage: "alarm") { openReminder() }
             }
@@ -167,8 +215,9 @@ struct ChatComposer: View {
                 text: $draft, mentions: $mentions, height: $textHeight, focusTick: focusTick,
                 handle: handle, mentionsEnabled: isGroup,
                 onMentionQuery: { query = $0 },
+                onSavedReplyQuery: { value in savedQuery = value; dismissedSavedQuery = nil; savedSelection = 0 },
                 onSuggestionKey: suggestionKey,
-                onSend: send)
+                onSend: sendOrExpand)
                 .frame(height: textHeight)
                 .overlay(alignment: .topLeading) {
                     if draft.isEmpty {
@@ -215,7 +264,7 @@ struct ChatComposer: View {
                 .help("Gửi biểu tượng thích")
                 .accessibilityLabel("Gửi biểu tượng thích")
             } else {
-                Button(action: send) {
+                Button(action: sendOrExpand) {
                     Image(systemName: "arrow.up").font(.system(size: 15, weight: .bold)).foregroundStyle(.white)
                         .frame(width: 36, height: 36).contentShape(Circle())
                 }
@@ -230,6 +279,31 @@ struct ChatComposer: View {
     }
 
     // MARK: Attachments, reminder
+
+    private struct SavedReplyPickerRequest: Identifiable {
+        let id = UUID()
+        let account: String
+        let conversation: String
+    }
+    private func openSavedReplies() {
+        guard let account = engine.profile?.userId else { return }
+        dismissedSavedQuery = savedQuery
+        savedReplyPicker = SavedReplyPickerRequest(account: account, conversation: conversationId)
+    }
+    private func insertSavedReply(_ reply: SavedReply) -> Bool {
+        guard engine.profile?.userId == reply.account, engine.openConversationId == conversationId,
+              engine.savedReplies.replies(account: reply.account).contains(reply) else { return false }
+        let inserted = handle.insertSavedReply(reply.body, replacing: savedQuery)
+        if inserted { savedQuery = nil; dismissedSavedQuery = nil; typingStickers.clear() }
+        return inserted
+    }
+    private func sendOrExpand() {
+        if savedSuggestionsOpen {
+            if !insertSavedReply(savedMatches[min(savedSelection, savedMatches.count - 1)]) { NSSound.beep() }
+            return
+        }
+        send()
+    }
 
     /// The picked files go to the conversation they were picked in, even if another one is open by the time they are sent.
     private func sendAttachments(_ urls: [URL], as kind: AttachmentKind) {
@@ -287,7 +361,7 @@ struct ChatComposer: View {
         let text = draft
         let state = StickerSuggestState.shared
         guard !conversationId.isEmpty, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              text.utf16.count <= 200, !suggestionsOpen else {
+              text.utf16.count <= 200, !suggestionsOpen, savedQuery == nil else {
             typingStickers.clear()
             return
         }
@@ -343,6 +417,16 @@ struct ChatComposer: View {
 
     /// Keys the text view forwards while the popover is open; returns whether it consumed the key.
     private func suggestionKey(_ key: MentionKey) -> Bool {
+        if savedSuggestionsOpen {
+            let matches = savedMatches
+            switch key {
+            case .down: savedSelection = (savedSelection + 1) % matches.count
+            case .up: savedSelection = (savedSelection - 1 + matches.count) % matches.count
+            case .confirm: if !insertSavedReply(matches[min(savedSelection, matches.count - 1)]) { NSSound.beep() }
+            case .cancel: dismissedSavedQuery = savedQuery
+            }
+            return true
+        }
         // Esc hides the sticker suggestions (they take no other keys: Return keeps sending the text).
         if !suggestionsOpen, stickerStripOpen, key == .cancel { typingStickers.dismissed = true; return true }
         guard suggestionsOpen else { return false }
@@ -438,6 +522,25 @@ private struct MentionSuggestions: View {
 final class ComposerHandle {
     weak var textView: NSTextView?
 
+    /// Use the text input path so undo and @mention offsets survive. Never submits the composer.
+    @discardableResult func insertSavedReply(_ body: String, replacing query: SavedReplyQuery? = nil) -> Bool {
+        guard let tv = textView, !tv.hasMarkedText(), let storage = tv.textStorage else { return false }
+        let range = query?.range ?? tv.selectedRange()
+        guard range.location != NSNotFound, range.location <= storage.length, range.length <= storage.length - range.location,
+              Range(range, in: storage.string) != nil else { return false }
+        if let query {
+            guard (storage.string as NSString).substring(with: range) == query.token else { return false }
+            var tokenOverlap = false
+            storage.enumerateAttribute(.zaloMention, in: range) { value, _, _ in if value != nil { tokenOverlap = true } }
+            guard !tokenOverlap else { return false }
+        }
+        tv.breakUndoCoalescing()
+        tv.insertText(NSAttributedString(string: body, attributes: ComposerTextView.baseAttributes), replacementRange: range)
+        tv.breakUndoCoalescing()
+        tv.window?.makeFirstResponder(tv)
+        return true
+    }
+
     func insertMention(_ candidate: MentionCandidate, replacing range: NSRange) {
         guard let tv = textView, let storage = tv.textStorage,
               NSMaxRange(range) <= storage.length,
@@ -479,6 +582,7 @@ struct ComposerTextView: NSViewRepresentable {
     var handle: ComposerHandle? = nil
     var mentionsEnabled = false
     var onMentionQuery: (MentionQuery?) -> Void = { _ in }
+    var onSavedReplyQuery: (SavedReplyQuery?) -> Void = { _ in }
     /// While the popover is open: ↑ ↓ Return/Tab Esc. Returns true when consumed.
     var onSuggestionKey: (MentionKey) -> Bool = { _ in false }
     var onSend: () -> Void
@@ -545,7 +649,11 @@ struct ComposerTextView: NSViewRepresentable {
         scroll.hasHorizontalScroller = false
         scroll.documentView = tv
         context.coordinator.lastFocusTick = focusTick
-        DispatchQueue.main.async { [weak tv] in tv?.window?.makeFirstResponder(tv) }
+        DispatchQueue.main.async { [weak tv, weak coordinator = context.coordinator] in
+            guard let tv else { return }
+            tv.window?.makeFirstResponder(tv)
+            coordinator?.refreshQuery(tv)
+        }
         return scroll
     }
 
@@ -679,6 +787,11 @@ struct ComposerTextView: NSViewRepresentable {
 
         /// "@query" ending at the caret: "@" at the start or after whitespace, not inside a token.
         func refreshQuery(_ tv: NSTextView) {
+            var saved = SavedReplyQuery.detect(in: tv.string, selection: tv.selectedRange(), composing: tv.hasMarkedText())
+            if let range = saved?.range, let storage = tv.textStorage {
+                storage.enumerateAttribute(.zaloMention, in: range) { value, _, _ in if value != nil { saved = nil } }
+            }
+            if lastSavedQuery != saved { lastSavedQuery = saved; parent.onSavedReplyQuery(saved) }
             guard parent.mentionsEnabled else { return }
             var result: MentionQuery?
             let selection = tv.selectedRange()
@@ -709,8 +822,10 @@ struct ComposerTextView: NSViewRepresentable {
             }
         }
         private var lastQuery: MentionQuery?
+        private var lastSavedQuery: SavedReplyQuery?
 
         func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+            guard !textView.hasMarkedText() else { return false }
             switch selector {
             case #selector(NSResponder.moveUp(_:)): if parent.onSuggestionKey(.up) { return true }
             case #selector(NSResponder.moveDown(_:)): if parent.onSuggestionKey(.down) { return true }

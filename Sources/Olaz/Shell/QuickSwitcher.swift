@@ -17,7 +17,7 @@ struct QuickSwitcher: View {
 
 /// Commands offered below the search results.
 private enum QuickCommand: CaseIterable {
-    case inbox, unread, contacts, zcloud, settings, tour
+    case inbox, unread, contacts, zcloud, plugins, settings, tour
 
     var symbol: String {
         switch self {
@@ -25,6 +25,7 @@ private enum QuickCommand: CaseIterable {
         case .unread: "bubble.left.and.text.bubble.right"
         case .contacts: "person.2"
         case .zcloud: "externaldrive"
+        case .plugins: "puzzlepiece.extension"
         case .settings: "gearshape"
         case .tour: "questionmark.circle"
         }
@@ -37,7 +38,7 @@ private enum QuickCommand: CaseIterable {
         case .contacts: "⌥⌘5"
         case .zcloud: "⌥⌘6"
         case .settings: "⌘,"
-        case .tour: nil
+        case .tour, .plugins: nil
         }
     }
 }
@@ -296,6 +297,7 @@ private struct QuickSwitcherPanel: View {
         case .unread: "Đi tới \(ConversationTypeFilter.unread.title)"
         case .contacts: "Đi tới Danh bạ"
         case .zcloud: "Đi tới zCloud"
+        case .plugins: "Mở Plugin"
         case .settings: "Mở Cài đặt…"
         case .tour: "Hướng dẫn sử dụng \(AppBrand.name)"
         }
@@ -344,6 +346,7 @@ private struct QuickSwitcherPanel: View {
             case .unread: shell.destination = .unread
             case .contacts: shell.destination = .friends
             case .zcloud: shell.destination = .zcloud
+            case .plugins: shell.destination = .plugins
             case .settings: openSettings()
             case .tour: shell.startTour()
             }

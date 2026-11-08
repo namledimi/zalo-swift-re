@@ -941,7 +941,10 @@
     return null;
   };
 
-  const deactivate = (id) => safe(() => S.loader.cacheMessageLoader.get(id).deActive(), null);
+  const deactivate = (id) => {
+    if (window.__zaloAI && window.__zaloAI.isWatching(id)) return;
+    safe(() => S.loader.cacheMessageLoader.get(id).deActive(), null);
+  };
 
   // Composer mentions → the official list; positions must point at an '@' inside the text.
   const cleanMentions = (list, text) => {
@@ -1376,7 +1379,7 @@
 
   // Internals for the card-actions adapter (card-actions-adapter.js attaches `performAction` & co. to `chat`).
   Object.defineProperty(chat, '__core', {
-    value: { S, ready, controller, repairController, findMessage, convOf, isGroupId, isMeUid, meNow, myName, myAvatar, parseJSON, str, absUrl, nameOf, avatarOf, diag, scrubErr, safe, own, sleep, waitFor, MSG, boxFor, serial, refresh, chatBoxes },
+    value: { S, ready, controller, repairController, findMessage, convOf, isGroupId, isMeUid, meNow, myName, myAvatar, parseJSON, str, absUrl, nameOf, avatarOf, diag, scrubErr, safe, own, sleep, waitFor, MSG, boxFor, serial, refresh, chatBoxes, mapAll, openConversationId: () => track.id },
     enumerable: false,
   });
   window.__zaloChat = chat;

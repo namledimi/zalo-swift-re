@@ -82,6 +82,14 @@ final class ZaloEngine {
     internal(set) var openConversationId: String?
     /// Texts the official client refused to send, kept per conversation until its composer takes them back.
     var failedDrafts = FailedDraftStore()
+    let aiReply = AIReplyController()
+    let plugins = PluginManager()
+    let work = WorkStore()
+    let savedReplies = SavedReplyStore()
+    let workAssistant = WorkAssistantController()
+    let workProducts = WorkProductsController()
+    var workDraft: WorkDraftInsertion?
+    @ObservationIgnored var aiWatchSignature: String?
     /// Messages per conversation, oldest first.
     internal(set) var messages: [String: [ChatMessage]] = [:]
     /// Whether older history can be loaded per conversation.
@@ -261,6 +269,7 @@ final class ZaloEngine {
         self.platform = platform
         self.mainProcess = mainProcess
         self.host = host
+        configureAIReply()
         startDevEvalIfEnabled()
         phase = mainProcess.hasSession ? .signingIn : .login(LoginState())
         mainProcess.start()
@@ -275,6 +284,7 @@ final class ZaloEngine {
 
     /// Clears the session cookies and local client data, then shows a fresh QR.
     func logOut() {
+        aiReply.resetWork()
         ZaloMainProcess.clearCookies()
         mainProcess?.resetAccountState()
         profile = nil
@@ -286,11 +296,13 @@ final class ZaloEngine {
         resetMessageActions()
         failedDrafts = FailedDraftStore()   // unsent text of the previous account must not show up in the next one
         refreshQR()
+        syncAIWatching()
     }
 
     // MARK: Events from the runtime
 
     private func handle(_ event: ZaloMainProcess.Event) {
+        defer { syncAIWatching() }
         EngineLog.shared.write("main-process \(event)")
         switch event {
         case .loginSucceeded:
@@ -318,6 +330,8 @@ final class ZaloEngine {
         EngineLog.shared.write("page \(event)")
         switch event {
         case .startedLoading:
+            aiReply.resetWork()
+            aiWatchSignature = nil
             mainProcess?.pageDidStartLoading()
             // The page that asked is gone: its confirms can no longer be answered.
             dropComposerConfirms()
@@ -328,12 +342,14 @@ final class ZaloEngine {
                 // The main client is up; conversations stream in as it syncs.
                 phase = .ready
             }
+            syncAIWatching()
         case .failed(let error):
             log("[navigation] \(error.localizedDescription)")
         }
     }
 
     private func handle(state: [String: Any]) {
+        defer { syncAIWatching() }
         EngineLog.shared.write("state page=\(state["page"] ?? "-") event=\(state["event"] ?? "-") keys=\(state.keys.sorted())")
         switch state["page"] as? String {
         case "login":
@@ -362,6 +378,8 @@ final class ZaloEngine {
                 phase = .login(login)
                 scheduleExpiry()
             }
+        case "main" where state["aiReply"] != nil:
+            handleAIReply(state: state)
         case "main" where state["convActions"] != nil:
             handleConversationActions(state: state)
         case "main" where state["conversationExtras"] != nil:

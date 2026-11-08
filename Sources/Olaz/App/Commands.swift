@@ -50,6 +50,8 @@ struct OlazCommands: Commands {
             Divider()
             destination("Danh bạ", .friends, key: "5")
             destination("zCloud", .zcloud, key: "6")
+            Divider()
+            destination("Plugin", .plugins, key: "7")
         }
 
         CommandMenu("Hội thoại") {

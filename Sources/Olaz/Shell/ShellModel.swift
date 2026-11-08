@@ -20,12 +20,13 @@ enum SidebarDestination: Hashable {
     case myCloud
     case zcloud
     case friends, groups, requests, addFriend
+    case plugins
 
     /// Destinations whose content column is a conversation list and whose detail is a chat.
     var isConversationList: Bool {
         switch self {
         case .inbox, .other, .unread, .strangers, .hidden, .label, .myCloud: true
-        case .zcloud, .friends, .groups, .requests, .addFriend: false
+        case .zcloud, .friends, .groups, .requests, .addFriend, .plugins: false
         }
     }
 
@@ -57,7 +58,7 @@ enum SidebarDestination: Hashable {
         case .other: (.other, [])
         case .unread: (.unread, [])
         case .label(let id): (defaultTab, [id])
-        case .strangers, .hidden, .zcloud, .friends, .groups, .requests, .addFriend: nil
+        case .strangers, .hidden, .zcloud, .friends, .groups, .requests, .addFriend, .plugins: nil
         }
     }
 }
@@ -79,6 +80,7 @@ final class ShellModel {
     var destination: SidebarDestination = .inbox
     /// The conversation shown in the detail column (conversation-list destinations).
     var selection: String?
+    var savedChatDrafts: [String: String] = [:]
     var columns: NavigationSplitViewVisibility = .all
     /// Conversation info inspector (⌥⌘I).
     var showInspector = false
@@ -106,6 +108,7 @@ final class ShellModel {
     var contactSelection: String?
     /// Selected zCloud screen.
     var cloudRoute: CloudRoute? = .media
+    var pluginDestination: PluginDestination = .connections
     /// Running coach-mark step, nil when no tour is shown.
     var tour: TourStep?
     /// The "Tạo nhóm" sheet, nil when it is not shown.
@@ -133,12 +136,14 @@ final class ShellModel {
     /// Back to a fresh window: the model outlives the sign-in, so a logout (or the next account's QR sign-in) must not
     /// inherit the previous account's open chat, search, unlocked hidden mailbox or running tour.
     func reset() {
+        savedChatDrafts = [:]
         selection = nil
         destination = .inbox
         search = ""
         unlockedHiddenIds = nil
         contactSelection = nil
         cloudRoute = .media
+        pluginDestination = .connections
         tour = nil
         showQuickSwitcher = false
         showInspector = false

@@ -52,6 +52,161 @@ open build/Olaz.app            # real QR login — scan with Zalo on your phone
 A new PC session has no message history except My Cloud, because Zalo keeps history on the phone. Use
 **Đồng bộ tin nhắn từ điện thoại** (confirm on the phone) to import it.
 
+### AI replies (local command bridge)
+
+Open **Settings (⌘,) → AI** to configure **ChatGPT via Codex** or **Claude via Claude Code**. The bridge uses
+the locally installed `codex` / `claude` executable and its existing login (`codex login` / `claude auth login`).
+It does not automate the ChatGPT/Claude desktop windows. Executables in common install locations are detected
+automatically; a custom path and an optional model can be set for each provider. **Kiểm tra công cụ** checks the
+installed executable's version; it does not verify authentication or make a model request.
+**Thử với câu hỏi này** checks a real model response using an editable question, configured instructions/documents,
+and enabled MCP tools, without sending any Zalo message. Claude diagnostics show the names of MCP tools it actually
+called. Replies requiring MCP data must look it up before claiming data is missing; configured source/tool names
+are supplied to the model without credentials. Claude loads the explicitly granted tool catalog upfront. Failed
+MCP startup or denied tool permissions prevent that generated answer from being sent automatically.
+
+1. Enter reply instructions and optionally import UTF-8 `.txt`, `.md`, or `.json` reference documents (200 KB per
+   file, 400 KB total). Imported content is copied into Olaz's local AI configuration.
+2. Select up to 20 conversations for the signed-in Zalo account.
+3. Choose **Soạn để duyệt** to review/edit an AI suggestion in its chat, or **Tự động gửi** to send automatically.
+4. Turn on **Bật trợ lý AI**. The feature is off by default.
+
+The open chat's **Thông tin** panel also has an **AI cho hội thoại này** switch below its quick actions. It controls
+the same conversation selection as Settings → AI. **Cài đặt AI…** opens the AI tab directly; the app-wide switch
+remains separate, and the chat panel shows when AI is paused globally.
+
+Only new text messages received after enabling are eligible; existing/synced history does not trigger replies.
+Messages arriving close together are combined after a configurable delay. A newer message, manual text reply,
+configuration change, hidden/unavailable conversation, or logout cancels pending replies. Sending revalidates the
+latest message against the renderer. Conversations need not be open, but **Olaz must remain running**.
+
+The bridge runs on the Mac; model inference uses OpenAI/Anthropic's service. Selected recent messages and the
+instructions/reference documents are sent to that provider. This is prompt context, not model training or a
+semantic document index. Settings are stored at `~/Library/Application Support/Olaz/AI/settings.json` with
+owner-only permissions. Model subprocesses use temporary input/output files that are removed on completion,
+have a 90-second deadline, and run without personal MCP configuration/plugins and with command tools disabled.
+Only explicitly enabled Plugin connections and their selected tools are provided to the assistant.
+No actual conversations are sent by the unit tests (`swift test --filter AIReplyTests`).
+
+Integration references: [Codex non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode),
+[Claude Code programmatic mode](https://code.claude.com/docs/en/headless).
+
+### Per-chat notes and tasks
+
+Open **+ → Ghi chú riêng…** or **+ → Việc cần làm…**, or use their separate cards in the conversation inspector.
+Each opens its own sheet: notes have a larger editor and save locally as you edit; tasks have Pending, Completed,
+and Removed tabs and support completion, due dates, edits, recoverable removal, and restoration. Records are scoped to
+both Zalo account and conversation, and do not send chat messages or feed AI automatically.
+See the [Vietnamese guide](docs/OLAZ-CHAT-NOTES-TODO.vi.md).
+
+### Saved replies
+
+Use **+ → Tin nhắn mẫu** in a chat or **Settings → Tin nhắn mẫu** to save, edit, search, remove, and restore
+per-account reply templates. Typing `/dia-chi` opens matching suggestions; Return/Tab inserts the selected text
+without sending it. Insertion preserves the rest of the draft, mention offsets, and native undo. Templates stay
+local across launches. See the [Vietnamese usage guide](docs/OLAZ-SAVED-REPLIES.vi.md).
+
+### Work assistant and commerce sources
+
+Plugin now includes a direct work-assistant chat, MCP product cards/quotes, customer records/follow-ups,
+local order drafts, and a guide library. WordPress/WooCommerce presets generate the MCP Adapter endpoint and
+support Application Password authentication. Adapter execution is restricted by an explicit ability allowlist
+as well as tool grants. Meta Ads and custom Facebook Page/Messenger servers have separate presets.
+
+Conversation AI controls support mode overrides, source selection, timed pauses, and optional pauses after
+manual replies. Assistant text can be appended to a Zalo draft; image sending requires a recipient confirmation.
+Order drafts stay local and do not create remote orders. Website credentials and Meta client setup are still
+required for live connections; a preset alone is not a connected account.
+
+Detailed Vietnamese documentation: [implementation plan](docs/OLAZ-WORKSPACE-PLAN.vi.md) and
+[connection and usage guide](docs/OLAZ-INTEGRATIONS.vi.md).
+
+### Plugin → MCP
+
+**Plugin** in the sidebar (⌥⌘7, also in ⌘K) manages external tools for the assistant replying inside Zalo.
+It supports local **stdio** servers and remote **Streamable HTTP** servers using the MCP 2025-11-25 lifecycle.
+
+1. Choose **Thêm kết nối…** and paste the MCP URL directly (for example `https://your-server.example/mcp`).
+   Under **Xác thực**, choose the method documented by the server: **Bearer token**, **API key trong header**
+   (including its required header name), **Tên đăng nhập / mật khẩu (HTTP Basic)**, or **Đăng nhập qua trình duyệt (OAuth)**. Enter credentials in Olaz's
+   masked fields. Extra headers can be entered as JSON; custom authentication headers also have a JSON option.
+   Existing connections can be updated through **Sửa…**. HTTP Basic only works when the server supports it;
+   a website login does not necessarily authenticate MCP.
+   Advanced setup also accepts a standard `mcpServers` JSON document, or a single server object containing
+   `command` / `args` / `env` for stdio, or `url` / `headers` for Streamable HTTP. JSON configurations use their own
+   `headers`; the authentication form applies when entering a URL directly.
+2. For OAuth, save first and choose **Đăng nhập OAuth…** on the connection card. Olaz discovers protected-resource
+   and authorization-server metadata, registers a public client when supported, and opens the system browser with
+   PKCE S256. Complete sign-in and consent there. Advanced OAuth fields accept a pre-registered Client ID, optional
+   Client Secret, scopes, and callback port; register the displayed loopback redirect URI with that client.
+   Servers requiring an HTTPS callback can use **Callback HTTPS** in the advanced OAuth fields. Enter the full
+   HTTPS URL (no query, fragment, or embedded credentials) of a tunnel forwarding to `http://127.0.0.1:8765`
+   (or the selected local port), preserving the callback path. Register exactly that HTTPS URL at the provider.
+   Olaz sends it in client registration, browser authorization and code exchange, while receiving the forwarded
+   request only on loopback and checking its path, state, and PKCE. The tunnel must run during browser sign-in;
+   normal MCP tool calls go directly to the configured MCP server and do not use the callback tunnel.
+   Choose **Kiểm tra và tải công cụ** to perform a real MCP handshake and read the server's tool catalog.
+3. Select the exact tools the assistant may use, then enable **Cho trợ lý AI dùng kết nối này**. New or edited
+   connections start disabled with no tools granted. Command tools on the Mac remain disabled.
+4. The existing AI instructions and review/automatic-send setting continue to apply to AI-enabled conversations.
+   For example, add an instruction to look up current order status using the selected MCP tool when asked.
+
+The same panel can call a selected tool with JSON arguments, show its text/structured result, and copy that result
+into the AI's reference documents with **Dùng làm dữ liệu hướng dẫn AI**. That creates a local snapshot; normal
+assistant tool calls query the MCP server directly when needed.
+
+Use an installed/authenticated server. Remote URLs require HTTPS (HTTP is allowed on loopback only), and redirects
+are not followed with configured credentials. OAuth requires standards-compliant discovery and PKCE S256; servers
+without dynamic registration need a pre-registered Client ID. A hosted client-metadata document can also be supplied
+as Client ID where the provider supports it; Olaz does not host one automatically. Native Google Drive sign-in is deferred.
+
+Meta Ads currently rejects Olaz's automatic client registration with HTTP 400 `invalid_client_metadata`:
+`Dynamic registration is not available for this client.` Reading Meta's public OAuth metadata succeeds but does not
+verify registration, browser consent, or account access. For this connection, supply an accepted Meta App ID in
+**Cấu hình OAuth nâng cao**, with the application's MCP permissions and displayed Redirect URI configured at Meta.
+Without that client setup (or an already valid MCP access token supplied as Bearer authentication), Olaz cannot
+complete this server's login. OAuth errors identify registration, code exchange, or refresh failures and show only
+recognized error codes and local guidance; raw server error descriptions are never displayed or logged.
+
+For temporary HTTPS testing with an installed `cloudflared`, run:
+
+```bash
+cloudflared tunnel --url http://127.0.0.1:8765
+```
+
+Append `/callback` to the generated HTTPS hostname and use the same full URL in Olaz and the provider's registered
+callbacks. [Cloudflare Quick Tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/) use a
+different hostname on each start, so keep the process running and update both configurations after restarting it.
+Use a stable hostname for regular use. A public callback does not replace the provider's Client ID, Client Secret
+if required, or account consent. Olaz does not create or manage the external tunnel itself.
+
+Plugin settings, including configured environment/header fields, are stored in the owner-only local file
+`~/Library/Application Support/Olaz/Plugins/settings.json`. Per-request provider configuration is written to private
+temporary files and removed when the model process finishes; credentials are not interpolated into provider arguments.
+OAuth access/refresh tokens and Client Secrets are stored separately in macOS Keychain. Olaz refreshes expiring OAuth
+sessions before manual tool access and AI replies, retaining rotated refresh tokens. Only the current access token
+is passed to the temporary provider proxy; refresh tokens and OAuth Client Secrets stay in Olaz.
+Successfully read credentials are cached in the running app's memory, so each reply does not read Keychain again.
+Denied or failed Keychain reads/writes do not retry on every incoming message. An explicit **Kiểm tra và tải công cụ**,
+manual tool call, or **Đăng nhập OAuth…** allows another attempt. Closing the app clears its in-memory cache.
+macOS **Allow** grants a single access; **Always Allow** remembers the app's identity. The default ad-hoc development
+signature is bound to the binary hash and changes when the executable changes, so a rebuilt app may need permission
+again even after **Always Allow**. Use the same stable signing certificate through `OLAZ_SIGN_IDENTITY` for updates
+that preserve code identity. Do not grant all applications access to the credential to work around development prompts.
+Both providers use Olaz's stdio adapter, which exposes only selected tools and reads server credentials from the
+private temporary file. Existing personal Codex/Claude configuration is not modified.
+
+Offline integration tests use `scripts/testing/mcp-fixture.py`:
+
+```bash
+swift test --filter 'PluginTests|AIReplyTests|MCPOAuthTests'
+# Optional: synthetic model requests against the fixture (no Zalo messages/data).
+OLAZ_MCP_PROVIDER_TESTS=1 swift test --filter providersCanCallExplicitlyAllowedMCPTools
+```
+
+Protocol references: [MCP transports](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports),
+[Codex MCP](https://learn.chatgpt.com/docs/extend/mcp), [Claude Code MCP](https://code.claude.com/docs/en/mcp).
+
 ### Release (maintainers)
 
 ```bash

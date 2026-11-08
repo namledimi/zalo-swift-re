@@ -59,20 +59,23 @@ struct ChatView: View {
             PinnedBar(conversationId: id, open: openPin)
         }
         .safeAreaBar(edge: .bottom, spacing: 0) {
-            ChatComposer(
-                name: conversation.displayName,
-                conversationId: id,
-                isGroup: conversation.isGroup,
-                draft: $draft,
-                mentions: $draftMentions,
-                replyTo: $replyTo,
-                typingName: engine.typing[id],
-                focusTick: focusTick,
-                send: send,
-                sendLike: {
-                    sendTick += 1
-                    Task { if await !engine.sendText("👍", to: id) { notice = .like } }
-                })
+            VStack(spacing: 0) {
+                AIReplyDraftView(conversationId: id)
+                ChatComposer(
+                    name: conversation.displayName,
+                    conversationId: id,
+                    isGroup: conversation.isGroup,
+                    draft: $draft,
+                    mentions: $draftMentions,
+                    replyTo: $replyTo,
+                    typingName: engine.typing[id],
+                    focusTick: focusTick,
+                    send: send,
+                    sendLike: {
+                        sendTick += 1
+                        Task { if await !engine.sendText("👍", to: id) { notice = .like } }
+                    })
+            }
         }
         .alert("Chưa gửi được tin nhắn", isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
             Button("OK", role: .cancel) {}
@@ -109,11 +112,17 @@ struct ChatView: View {
         .cardActionPresenter()
         .messageActionPresenter(conversationId: id)
         .onAppear {
+            if let account = engine.profile?.userId { draft = shell.savedChatDrafts[account + ":" + id] ?? draft }
+            consumeWorkDraft()
             focusTick += 1
             restoreFailedDraft()
             markReadIfNeeded(last: loaded?.last, newIncomingOnly: false)
         }
         .onChange(of: engine.failedDrafts.revision) { _, _ in restoreFailedDraft() }
+        .onChange(of: engine.workDraft?.id) { _, _ in consumeWorkDraft() }
+        .onChange(of: draft) { _, value in
+            if let account = engine.profile?.userId { shell.savedChatDrafts[account + ":" + id] = value }
+        }
         .onChange(of: loaded?.last?.id) { _, _ in markReadIfNeeded(last: engine.messages[id]?.last, newIncomingOnly: true) }
         .onChange(of: conversation.unread) { _, _ in markReadIfNeeded(last: engine.messages[id]?.last, newIncomingOnly: false) }
         .onChange(of: scenePhase) { _, phase in
@@ -127,6 +136,13 @@ struct ChatView: View {
 
     /// Toolbar room kept free of the header: the call buttons, the info button and the "⋯" menu with their spacing.
     private static let toolbarButtonsRoom: CGFloat = 230
+
+    private func consumeWorkDraft() {
+        guard let request = engine.workDraft, request.account == engine.profile?.userId, request.conversationID == id else { return }
+        draft = draft.isEmpty ? request.text : draft + "\n" + request.text
+        engine.workDraft = nil
+        focusTick += 1
+    }
 
     /// Avatar, name and subtitle: the first toolbar item of the chat column.
     private func header(subtitle: String) -> some View {

@@ -63,6 +63,7 @@ if [[ -n "${OLAZ_SIGN_IDENTITY:-}" ]]; then
         --entitlements scripts/Olaz.entitlements "$APP"
 else
     codesign --force --sign - --entitlements scripts/Olaz.entitlements "$APP"
+    echo "Note: rebuilt ad-hoc binaries may require Keychain permission again; set OLAZ_SIGN_IDENTITY to a stable signing certificate for consistent identity." >&2
 fi
 
 echo "Bundled $APP"

@@ -56,6 +56,11 @@ struct ChatInspector: View {
             VStack(spacing: 20) {
                 header
                 actions
+                ConversationNotebookShortcut(conversationID: id, name: conversation.displayName)
+                CustomerWorkShortcut(conversationID: id, name: conversation.displayName)
+                if id != engine.selfConversationId, id != engine.profile?.userId {
+                    ConversationAISettings(conversationId: id)
+                }
                 if conversation.isGroup {
                     groupBoard(LoadedPolls(messages: loaded).polls)
                     membersSection
@@ -106,7 +111,7 @@ struct ChatInspector: View {
         let muted = engine.isConversationMuted(id)
         let plan = ConversationMenuPlan.make(id: id, preset: .chatBox, state: state, unread: 0, muted: muted)
         return GlassEffectContainer(spacing: 14) {
-            HStack(alignment: .top, spacing: 18) {
+            HStack(alignment: .top, spacing: 8) {
                 if !state.loaded || plan.mute != nil {
                     if muted {
                         ActionSlot("Bật thông báo") {
@@ -114,14 +119,14 @@ struct ChatInspector: View {
                                 .glassAction()
                         }
                     } else {
-                        ActionSlot("Tắt thông báo") {
-                            Menu {
-                                ForEach(MuteDuration.allCases) { duration in
-                                    Button(duration.title) { engine.muteConversation(id, duration) }
-                                }
-                            } label: { actionGlyph("bell.slash") }
-                                .glassAction()
-                        }
+                        Menu {
+                            ForEach(MuteDuration.allCases) { duration in
+                                Button(duration.title) { engine.muteConversation(id, duration) }
+                            }
+                        } label: { actionMenuLabel("Tắt thông báo", symbol: "bell.slash") }
+                            .inspectorActionMenu()
+                            .accessibilityLabel("Tắt thông báo hội thoại")
+                            .accessibilityIdentifier("conversation.inspector.mute")
                     }
                 }
                 switch plan.pin {
@@ -145,12 +150,13 @@ struct ChatInspector: View {
                             .help("Tạo nhóm với \(conversation.displayName)")
                     }
                 }
-                ActionSlot("Thêm") {
-                    Menu {
-                        ConversationActionsMenu(conversationId: id, preset: .thread, showLabelManager: $showLabelManager)
-                    } label: { actionGlyph("ellipsis") }
-                        .glassAction()
-                }
+                Menu {
+                    ConversationActionsMenu(conversationId: id, preset: .thread, showLabelManager: $showLabelManager)
+                } label: { actionMenuLabel("Thêm", symbol: "ellipsis") }
+                    .inspectorActionMenu()
+                    .help("Thêm tùy chọn hội thoại")
+                    .accessibilityLabel("Thêm tùy chọn hội thoại")
+                    .accessibilityIdentifier("conversation.inspector.more")
             }
             .frame(maxWidth: .infinity)
         }
@@ -158,6 +164,17 @@ struct ChatInspector: View {
 
     private func actionGlyph(_ symbol: String) -> some View {
         Image(systemName: symbol).font(.system(size: 16)).frame(width: 22, height: 22)
+    }
+
+    /// Draw the menu label itself: applying a glass ButtonStyle to Menu loses its control and hit region on macOS.
+    private func actionMenuLabel(_ title: String, symbol: String) -> some View {
+        ActionSlot(title) {
+            actionGlyph(symbol)
+                .frame(width: 36, height: 36)
+                .contentShape(Circle())
+                .glassEffect(.regular.interactive(), in: Circle())
+        }
+        .contentShape(Rectangle())
     }
 
     // MARK: Group
@@ -380,18 +397,23 @@ private struct ActionSlot<Content: View>: View {
             content
             Text(title).font(.system(size: 10.5, weight: .medium)).foregroundStyle(.secondary).lineLimit(1)
         }
-        .frame(minWidth: 58)
+        .frame(minWidth: 0, maxWidth: .infinity)
     }
 }
 
 private extension View {
-    /// Round glass button (also for a `Menu`), the style of the composer's controls.
+    /// Round glass styling for buttons. Menus keep their native menu control and use a custom label.
     func glassAction() -> some View {
-        menuStyle(.button)
-            .menuIndicator(.hidden)
-            .buttonStyle(.glass)
+        buttonStyle(.glass)
             .buttonBorderShape(.circle)
             .controlSize(.large)
+    }
+
+    func inspectorActionMenu() -> some View {
+        menuStyle(.button)
+            .menuIndicator(.hidden)
+            .buttonStyle(.plain)
+            .frame(minWidth: 0, maxWidth: .infinity)
     }
 }
 

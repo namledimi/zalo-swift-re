@@ -1,29 +1,43 @@
 import SwiftUI
 
+enum SettingsTab: String {
+    case general, appearance, notifications, privacy, stickers, account, ai, savedReplies
+    static let selectionKey = "olaz.settings.selectedTab"
+}
+
 /// The Settings window (⌘,): one tab per topic, each a grouped `Form`. The notification, hidden-chat and sticker tabs embed the
 /// sections of their own files, which read and write the official client's settings.
 struct SettingsView: View {
+    @AppStorage(SettingsTab.selectionKey) private var selectedTab = SettingsTab.general
+
     var body: some View {
-        TabView {
-            Tab("Chung", systemImage: "gearshape") {
+        TabView(selection: $selectedTab) {
+            Tab("Chung", systemImage: "gearshape", value: SettingsTab.general) {
                 SettingsPane(height: 210) { GeneralSettings() }
             }
-            Tab("Giao diện", systemImage: "paintpalette") {
+            Tab("Giao diện", systemImage: "paintpalette", value: SettingsTab.appearance) {
                 SettingsPane(height: 700) { AppearanceSettings() }
             }
-            Tab("Thông báo", systemImage: "bell.badge") {
+            Tab("Thông báo", systemImage: "bell.badge", value: SettingsTab.notifications) {
                 SettingsPane(height: 440) { NotificationSettingsView() }
             }
-            Tab("Quyền riêng tư", systemImage: "lock") {
+            Tab("Quyền riêng tư", systemImage: "lock", value: SettingsTab.privacy) {
                 SettingsPane(height: 300) { PrivacySettings() }
             }
-            Tab("Sticker", systemImage: "face.smiling") {
+            Tab("Sticker", systemImage: "face.smiling", value: SettingsTab.stickers) {
                 SettingsPane(height: 160) { StickerSettingsSection() }
             }
-            Tab("Tài khoản", systemImage: "person.crop.circle") {
+            Tab("Tài khoản", systemImage: "person.crop.circle", value: SettingsTab.account) {
                 SettingsPane(height: 400) { AccountSettings() }
             }
+            Tab("AI", systemImage: "sparkles", value: SettingsTab.ai) {
+                SettingsPane(height: 700) { AIReplySettingsView() }
+            }
+            Tab("Tin nhắn mẫu", systemImage: "text.badge.plus", value: SettingsTab.savedReplies) {
+                SavedReplySettingsView()
+            }
         }
+        .frame(minWidth: 720)
     }
 }
 

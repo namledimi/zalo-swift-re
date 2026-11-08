@@ -156,6 +156,8 @@ private struct ContentColumn: View {
                 ConversationListColumn()
             } else if destination == .zcloud {
                 CloudListColumn()
+            } else if destination == .plugins {
+                PluginListColumn()
             } else {
                 ContactsListColumn(destination: destination)
             }
@@ -174,6 +176,8 @@ private struct DetailColumn: View {
                 ConversationDetail(conversationId: shell.selection)
             } else if destination == .zcloud {
                 CloudDetailColumn()
+            } else if destination == .plugins {
+                PluginDetailColumn()
             } else {
                 ContactsDetailColumn(destination: destination)
             }

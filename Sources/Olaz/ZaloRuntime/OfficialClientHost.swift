@@ -87,6 +87,7 @@ final class OfficialClientHost: NSObject {
         for script in [diagnostics, ConsoleHandler.script, Self.hostScript("network-shim"), bridge.specScript(), Self.hostScript("local-modules"), Self.hostScript("bridge"), Self.hostScript("state-adapter"), Self.hostScript("chat-adapter"), Self.hostScript("media-store-adapter"), Self.hostScript("card-actions-adapter"), Self.hostScript("sticker-adapter"), Self.hostScript("composer-adapter"), Self.hostScript("message-actions-adapter"), Self.hostScript("transfer-adapter"), Self.hostScript("conversations-adapter"), Self.hostScript("conversation-actions-adapter"), Self.hostScript("contacts-adapter"), Self.hostScript("group-create-adapter"), Self.hostScript("notification-adapter"), Self.hostScript("zcloud-adapter"), Self.hostScript("poll-adapter"), Self.hostScript("call-adapter")] {
             content.addUserScript(WKUserScript(source: script, injectionTime: .atDocumentStart, forMainFrameOnly: false))
         }
+        content.addUserScript(WKUserScript(source: Self.hostScript("ai-reply-adapter"), injectionTime: .atDocumentStart, forMainFrameOnly: true))
 
         webView = WKWebView(frame: NSRect(x: 0, y: 0, width: 1100, height: 720), configuration: config)
         webView.customUserAgent = ua

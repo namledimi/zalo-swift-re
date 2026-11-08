@@ -112,15 +112,21 @@ struct ReminderComposeSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SheetHeader(title: "Tạo nhắc hẹn") { requestClose() }
+            SheetHeader(title: "Tạo nhắc hẹn") { requestClose() }.padding(.horizontal, 8)
             Divider()
-            form.padding(16)
+            ScrollView {
+                form
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 24).padding(.vertical, 20)
+            }
+            .frame(height: info.pinToggle ? 380 : 340)
             Divider()
             SheetFooter(message: message, hint: issue, action: "Tạo nhắc hẹn", busy: busy, disabled: issue != nil, cancel: { requestClose() }) {
                 Task { await create() }
             }
+            .padding(.horizontal, 8)
         }
-        .frame(width: 440)
+        .frame(width: 480)
         .onReceive(Timer.publish(every: 20, on: .main, in: .common).autoconnect()) { now = $0 }
         .confirmationDialog("Bạn muốn huỷ nhắc hẹn đang được tạo?", isPresented: $confirmDiscard, titleVisibility: .visible) {
             Button("Hủy thay đổi", role: .destructive) { dismiss() }
@@ -134,20 +140,24 @@ struct ReminderComposeSheet: View {
                 Text("Nội dung").font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
                 TextField("Nhập nội dung mới hoặc dán link", text: $title, axis: .vertical)
                     .lineLimit(2...6).textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: .infinity)
+                    .accessibilityLabel("Nội dung nhắc hẹn")
             }
             VStack(alignment: .leading, spacing: 6) {
                 Text("Chọn thời gian").font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
-                Picker("Chọn thời gian", selection: Binding(get: { choice }, set: pick)) {
-                    Text("15 phút nữa").tag(TimeChoice.in15)
-                    Text("30 phút nữa").tag(TimeChoice.in30)
-                    Text("9:00 ngày mai").tag(TimeChoice.tomorrow9)
-                    Text("Khác").tag(TimeChoice.custom)
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                    timeButton("15 phút nữa", .in15)
+                    timeButton("30 phút nữa", .in30)
+                    timeButton("9:00 ngày mai", .tomorrow9)
+                    timeButton("Chọn ngày / giờ…", .custom)
                 }
-                .pickerStyle(.segmented).labelsHidden()
                 if choice == .custom {
                     DatePicker("Chọn ngày nhắc hẹn", selection: $start, in: Calendar.current.startOfDay(for: now)..., displayedComponents: [.date, .hourAndMinute])
+                        .datePickerStyle(.field).labelsHidden()
                         .environment(\.locale, Locale(identifier: "vi_VN"))
                         .font(.system(size: 13))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityLabel("Ngày và giờ nhắc hẹn")
                 } else {
                     Label(start.formatted(.dateTime.locale(Locale(identifier: "vi_VN")).weekday(.wide).day().month(.twoDigits).hour().minute()),
                           systemImage: "alarm")
@@ -157,11 +167,24 @@ struct ReminderComposeSheet: View {
             Picker("Lặp lại", selection: $rule) {
                 ForEach(ReminderRepeat.allCases) { Text($0.title).tag($0) }
             }
+            .pickerStyle(.menu)
             .font(.system(size: 13))
             if info.pinToggle {
                 Toggle("Ghim nhắc hẹn", isOn: $pin).toggleStyle(.switch).controlSize(.small).font(.system(size: 13))
             }
         }
+    }
+
+    private func timeButton(_ title: String, _ value: TimeChoice) -> some View {
+        Button { pick(value) } label: {
+            Text(title).font(.system(size: 13, weight: choice == value ? .semibold : .regular))
+                .frame(maxWidth: .infinity, minHeight: 30)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(choice == value ? Color.white : Color.primary)
+        .background(choice == value ? Color.accentColor : Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
+        .contentShape(RoundedRectangle(cornerRadius: 8))
+        .accessibilityAddTraits(choice == value ? .isSelected : [])
     }
 
     private func pick(_ next: TimeChoice) {

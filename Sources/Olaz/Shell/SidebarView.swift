@@ -30,6 +30,10 @@ struct SidebarView: View {
             mailboxes(counts)
             storage
             contacts
+            Section("Tiện ích") {
+                Label("Plugin", systemImage: "puzzlepiece.extension")
+                    .tag(SidebarDestination.plugins)
+            }
         }
         .listStyle(.sidebar)
         .safeAreaBar(edge: .bottom) { SidebarAccountFooter() }

@@ -25,9 +25,10 @@ extension ZaloEngine {
     /// and dropped when they no longer point at their "@Name".
     /// Returns false when the official client could not take the message (nothing was sent).
     @discardableResult
-    func sendText(_ text: String, to id: String, quoting messageId: String? = nil, mentions: [Mention] = []) async -> Bool {
+    func sendText(_ text: String, to id: String, quoting messageId: String? = nil, mentions: [Mention] = [], isAIReply: Bool = false) async -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return true }
+        if !isAIReply { aiReply.userWillSend(conversation: id) }
         let leading = text.utf16.prefix { unit in
             guard let scalar = Unicode.Scalar(unit) else { return false }
             return CharacterSet.whitespacesAndNewlines.contains(scalar)
@@ -152,7 +153,7 @@ extension ZaloEngine {
         typing[convId] = nil
     }
 
-    private static func chatMessage(_ json: [String: Any], fallbackConversation: String) -> ChatMessage? {
+    static func chatMessage(_ json: [String: Any], fallbackConversation: String) -> ChatMessage? {
         ChatMessage(json: json, fallbackConversation: fallbackConversation)
     }
 
